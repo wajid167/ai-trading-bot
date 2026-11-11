@@ -4,13 +4,13 @@ import numpy as np
 import yfinance as yf
 import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
-from execute_trade import place_paper_order, get_account_info, get_open_positions
+from execute_trade import place_paper_order_with_brackets, get_account_info, get_open_positions
 import time
 
 st.set_page_config(page_title="AI Live ML Trading Dashboard", layout="wide")
 
 st.markdown("# 📈 Real-Time AI & ML Stock & Crypto Trading Dashboard")
-st.write("Live market monitoring driven by real-time Scikit-Learn Machine Learning predictions & Alpaca portfolio tracker.")
+st.write("Live market monitoring driven by ML predictions, Alpaca portfolio tracking, and automated risk management.")
 
 # Multi-asset dictionary
 assets = {
@@ -58,9 +58,7 @@ def run_ml_prediction(df):
     data['SMA_15'] = data['Close'].rolling(window=15).mean()
     data['Volatility'] = data['Returns'].rolling(window=5).std()
     
-    # Target variable: 1 if next period price is higher, else 0
     data['Target'] = (data['Close'].shift(-1) > data['Close']).astype(int)
-    
     data.dropna(inplace=True)
     
     if len(data) < 20:
@@ -70,11 +68,9 @@ def run_ml_prediction(df):
     X = data[features]
     y = data['Target']
     
-    # Train Random Forest Classifier on historical interval data
     model = RandomForestClassifier(n_estimators=50, random_state=42)
     model.fit(X[:-1], y[:-1])
     
-    # Predict direction for the latest live bar
     latest_features = X.iloc[[-1]]
     prediction = model.predict(latest_features)[0]
     probabilities = model.predict_proba(latest_features)[0]
@@ -104,21 +100,32 @@ if not df_live.empty:
     fig.update_layout(xaxis_title="Time", yaxis_title="Price (USD)", template="plotly_dark")
     st.plotly_chart(fig, width='stretch')
 
-    # Trade Execution Panel
+    # Trade Execution & Risk Management Panel
     st.markdown("---")
-    st.subheader("⚡ Automated Paper Trade Execution")
+    st.subheader("⚡ Automated Risk-Managed Paper Trade Execution")
     
-    t_col1, t_col2 = st.columns(2)
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
     with t_col1:
         trade_qty = st.number_input("Order Quantity", min_value=0.01, value=1.0, step=0.1)
     with t_col2:
         recommended_action = "BUY" if "BUY" in ml_signal else "SELL"
         action = st.selectbox("Action", ["BUY", "SELL"], index=0 if recommended_action == "BUY" else 1)
+    with t_col3:
+        tp_pct = st.number_input("Take-Profit (%)", min_value=0.1, value=2.0, step=0.1)
+    with t_col4:
+        sl_pct = st.number_input("Stop-Loss (%)", min_value=0.1, value=1.0, step=0.1)
         
-    if st.button(f"Execute Paper {action} Order"):
+    if st.button(f"Execute Safe Paper {action} Order"):
         try:
-            order = place_paper_order(selected_ticker, qty=trade_qty, side=action)
-            st.success(f"Placed Paper {action} order for {trade_qty} unit(s) of {selected_ticker}! Order ID: {order.id}")
+            order = place_paper_order_with_brackets(
+                symbol=selected_ticker, 
+                qty=trade_qty, 
+                side=action, 
+                current_price=latest_price, 
+                tp_pct=tp_pct, 
+                sl_pct=sl_pct
+            )
+            st.success(f"Placed Risk-Managed Paper {action} order for {trade_qty} unit(s) of {selected_ticker}! Order ID: {order.id}")
         except Exception as e:
             st.error(f"Execution Error: {e}")
             
