@@ -12,31 +12,36 @@ def place_paper_order_with_brackets(symbol: str, qty: float = 1, side: str = "BU
     trading_client = get_trading_client()
     order_side = OrderSide.BUY if side.upper() == "BUY" else OrderSide.SELL
     
-    order_class = OrderClass.SIMPLE
-    take_profit_obj = None
-    stop_loss_obj = None
-    
-    # Agar live price mojood hai toh Bracket Order (TP & SL) configure karein
+    # Pehle Bracket Order try karein agar price mojood hai
     if current_price > 0:
-        order_class = OrderClass.BRACKET
-        if order_side == OrderSide.BUY:
-            tp_price = round(current_price * (1 + tp_pct / 100), 2)
-            sl_price = round(current_price * (1 - sl_pct / 100), 2)
-        else:
-            tp_price = round(current_price * (1 - tp_pct / 100), 2)
-            sl_price = round(current_price * (1 + sl_pct / 100), 2)
-            
-        take_profit_obj = TakeProfitRequest(limit_price=tp_price)
-        stop_loss_obj = StopLossRequest(stop_price=sl_price)
+        try:
+            if order_side == OrderSide.BUY:
+                tp_price = round(current_price * (1 + tp_pct / 100), 2)
+                sl_price = round(current_price * (1 - sl_pct / 100), 2)
+            else:
+                tp_price = round(current_price * (1 - tp_pct / 100), 2)
+                sl_price = round(current_price * (1 + sl_pct / 100), 2)
+                
+            order_data = MarketOrderRequest(
+                symbol=symbol,
+                qty=qty,
+                side=order_side,
+                time_in_force=TimeInForce.DAY,
+                order_class=OrderClass.BRACKET,
+                take_profit=TakeProfitRequest(limit_price=tp_price),
+                stop_loss=StopLossRequest(stop_price=sl_price)
+            )
+            return trading_client.submit_order(order_data=order_data)
+        except Exception:
+            # Agar bracket order fail ho jaye (jaise position conflict ki wajah se), toh standard order par fallback karein
+            pass
 
+    # Fallback: Standard Market Order (Without Brackets)
     order_data = MarketOrderRequest(
         symbol=symbol,
         qty=qty,
         side=order_side,
-        time_in_force=TimeInForce.DAY,
-        order_class=order_class,
-        take_profit=take_profit_obj,
-        stop_loss=stop_loss_obj
+        time_in_force=TimeInForce.DAY
     )
     submitted_order = trading_client.submit_order(order_data=order_data)
     return submitted_order
