@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 st.markdown("# 📈 AI Stock & Crypto Trading Bot Dashboard")
 st.write("Select an asset below to train the AI model and predict tomorrow's market movement live!")
